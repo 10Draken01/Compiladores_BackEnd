@@ -1,14 +1,44 @@
 package main
 
 import (
+    "github.com/gin-gonic/gin"
+    "github.com/joho/godotenv"
     "log"
-
-    "api_compiladores/src/db" // <- Reemplaza "project-root" con el nombre real de tu módulo
+    "os"
+    "api_compiladores/src/config"
+    "api_compiladores/src/routes"
+	"github.com/gin-contrib/cors"
 )
 
-func main() {
-    db.InitMongoDB()
+func validationENV(env string, envDefault string) string {
+    if env == "" {
+        return envDefault
+    }
+    return env
+}
 
-    // Puedes usar db.MongoDatabase aquí para acceder a colecciones
-    log.Println("Aplicación iniciada.")
+func main() {
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error cargando el archivo .env:", err)
+    }
+
+	// Leer puerto del .env
+	port := validationENV(os.Getenv("PORT"), "8000")
+
+    uri := validationENV(os.Getenv("MONGO_URI"), "mongodb://localhost:27017")
+
+    dbName := validationENV(os.Getenv("DB_NAME"), "lexicodb")
+
+    config.ConnectDB(uri)
+
+    r := gin.Default()
+
+    // Habilitar CORS
+    r.Use(cors.Default())
+
+    userCollection := config.GetCollection(dbName, "users")
+    routes.UserRoute(r, userCollection)
+
+    r.Run(":" + port)
 }
