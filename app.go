@@ -36,12 +36,17 @@ func main() {
 
     config.ConnectDB(uri)
 
+	// Primero obtener la colección
+	userCollection := config.GetCollection(dbName, "users")
+
+	// Luego pasarla a la función que carga los usuarios falsos
+	utils.AddOneHundredThousandUsers(userCollection)
+
     r := gin.Default()
 
     // Habilitar CORS
     r.Use(cors.Default())
 
-    userCollection := config.GetCollection(dbName, "users")
     routes.UserRoute(r, userCollection)
 
     r.Run(":" + port)
