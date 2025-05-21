@@ -12,9 +12,9 @@ func UserRoute(router *gin.Engine, collection *mongo.Collection) {
     userGroup := router.Group("/api/users")
     {
         userGroup.POST("/", controllers.CreateUser)
-        userGroup.GET("/", controllers.GetUsers)
-        userGroup.GET("/:id", controllers.GetUser)
-        userGroup.PUT("/:id", controllers.UpdateUser)
-        userGroup.DELETE("/:id", controllers.DeleteUser)
+        userGroup.GET("/page/:page", controllers.GetUsers)
+        userGroup.GET("/:Clave_Cliente", controllers.GetUser)
+        userGroup.PUT("/:Clave_Cliente", controllers.UpdateUser)
+        userGroup.DELETE("/:Clave_Cliente", controllers.DeleteUser)
     }
 }

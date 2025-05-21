@@ -7,6 +7,7 @@ import (
     "os"
     "api_compiladores/src/config"
     "api_compiladores/src/routes"
+    "api_compiladores/src/utils"
 	"github.com/gin-contrib/cors"
 )
 
@@ -18,9 +19,12 @@ func validationENV(env string, envDefault string) string {
 }
 
 func main() {
+    // Conectar a Redis
+    utils.ConnectRedis()
+
     err := godotenv.Load()
     if err != nil {
-        log.Fatal("Error cargando el archivo .env:", err)
+        log.Println("Error cargando el archivo .env:", err)
     }
 
 	// Leer puerto del .env
