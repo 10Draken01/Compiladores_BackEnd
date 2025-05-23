@@ -9,7 +9,7 @@ import (
 func UserRoute(router *gin.Engine, collection *mongo.Collection) {
     controllers.SetUserCollection(collection)
 
-    userGroup := router.Group("/api/users")
+    userGroup := router.Group("/api/clientes")
     {
         userGroup.POST("/", controllers.CreateUser)
         userGroup.GET("/page/:page", controllers.GetUsers)

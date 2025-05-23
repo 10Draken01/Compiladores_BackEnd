@@ -125,103 +125,76 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	// Validación de campos obligatorios
 	if user.Clave_Cliente == nil {
-		message := "Error: Clave_Cliente es obligatorio"
-		log.Println(message)
-
-        jsonData := gin.H{
-            "error":   message,
-            "example": exampleCreate,
-        }
-		c.JSON(http.StatusBadRequest, jsonData)
+		sendError(c, "Clave_Cliente es obligatorio")
 		return
 	}
 
-	var Clave_Cliente string
+	claveCliente, err := normalizeClaveCliente(user.Clave_Cliente)
+	if err != nil {
+		sendError(c, err.Error())
+		return
+	}
 
-    switch v := user.Clave_Cliente.(type) {
-    case string:
-        if !identRegexNumeric.MatchString(v) {
-            message := "Error: " + user.Nombre + " Clave_Cliente no es un identificador válido"
-            log.Println(message)
-            jsonData := gin.H{
-                "error":   message,
-                "example": exampleCreate,
-            }
-            c.JSON(http.StatusBadRequest, jsonData)
-            return
-        }
-		if len(v) > 10 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Clave de cliente no puede tener más de 10 caracteres"})
-			return
-		}
-
-		// Convertir a entero
-		intVal, err := strconv.Atoi(v)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Clave de cliente no es un número válido"})
-			return
-		}
-
-		// rellenar con ceros a la izquierda
-		newClave := fmt.Sprintf("%010d", intVal) // Rellenar con ceros a la izquierda
-        Clave_Cliente = newClave
-
-    case float64:
-        if math.Mod(v, 1) != 0 {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "Clave de cliente no puede ser decimal"})
-            return
-        }
-        if v < 0 {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "Clave de cliente no puede ser negativo"})
-            return
-        }
-		if v > 9999999999 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Clave de cliente no puede ser mayor a 10 dígitos"})
-			return
-		}
-
-        intVal := int(v)
-		// rellenar con ceros a la izquierda
-        newClave := fmt.Sprintf("%010d", intVal) 
-        Clave_Cliente = newClave
-
-    default:
-        message := "Tipo de dato no válido para Clave_Cliente"
-        log.Println(message)
-        jsonData := gin.H{
-            "error":   message,
-            "example": exampleCreate,
-        }
-        c.JSON(http.StatusBadRequest, jsonData)
-        return
-    }
-
-	// Crear nuevo ID
 	user.ID = primitive.NewObjectID()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-    
-	err := userCollection.FindOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente}).Decode(&user)
-	if err != nil {
-		user.Clave_Cliente = Clave_Cliente
-        _, err := userCollection.InsertOne(ctx, user)
-        if err != nil {
-            log.Println("Error al insertar usuario: ", err)
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al insertar usuario"})
-            return
-        }
 
-        c.JSON(http.StatusCreated, user)
-	} else {
-		message := "Error: El usuario con Clave_Cliente " + Clave_Cliente + " ya existe"
-        log.Println(message)
-        c.JSON(http.StatusBadRequest, gin.H{"error": message})
-        return
-    }
+	// Verificar existencia previa
+	var existingUser models.User
+	err = userCollection.FindOne(ctx, bson.M{"Clave_Cliente": claveCliente}).Decode(&existingUser)
+	if err == nil {
+		sendError(c, "El usuario con Clave_Cliente "+claveCliente+" ya existe")
+		return
+	}
+
+	user.Clave_Cliente = claveCliente
+	if _, err := userCollection.InsertOne(ctx, user); err != nil {
+		log.Println("Error al insertar usuario:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al insertar usuario"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
 }
+
+// Función para validar y normalizar Clave_Cliente
+func normalizeClaveCliente(clave interface{}) (string, error) {
+	switch v := clave.(type) {
+	case string:
+		if !identRegexNumeric.MatchString(v) {
+			return "", fmt.Errorf("Clave_Cliente no es un identificador válido")
+		}
+		intVal, err := strconv.Atoi(v)
+		if err != nil {
+			return "", fmt.Errorf("Clave_Cliente no es un número válido")
+		}
+		return fmt.Sprintf("%010d", intVal), nil
+
+	case float64:
+		if math.Mod(v, 1) != 0 {
+			return "", fmt.Errorf("Clave_Cliente no puede ser decimal")
+		}
+		if v < 0 {
+			return "", fmt.Errorf("Clave_Cliente no puede ser negativo")
+		}
+		return fmt.Sprintf("%010d", int(v)), nil
+
+	default:
+		return "", fmt.Errorf("Tipo de dato no válido para Clave_Cliente")
+	}
+}
+
+// Función para enviar errores con log y ejemplo
+func sendError(c *gin.Context, message string) {
+	log.Println("error:", message)
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error":   message,
+		"example": exampleCreate,
+	})
+}
+
 
 func GetUsers(c *gin.Context) {
 	page := c.Param("page")
