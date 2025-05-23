@@ -4,159 +4,115 @@ import (
 	"context"
 	"log"
 	"net/http"
-    "math"
-    "fmt"
+	"math"
+	"fmt"
+	"regexp"
 	"time"
-	"regexp"  // Paquete para expresiones regulares
 	"strconv"
 	"encoding/json"
-	// "strings"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"		
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"api_compiladores/src/models"
 	"api_compiladores/src/utils"
 )
 
-type ExampleUserCreate struct {
-    Clave_Cliente string `json:"Clave_Cliente" example:"001"`
-    Nombre        string `json:"Nombre" example:"Pedro"`
-    Celular       string `json:"Celular" example:"9613214782"`
-    Email         string `json:"Email" example:"correo@example.com"`
+type ExampleClienteCreate struct {
+	Clave_Cliente string `json:"Clave_Cliente" example:"001"`
+	Nombre        string `json:"Nombre" example:"Pedro"`
+	Celular       string `json:"Celular" example:"9613214782"`
+	Email         string `json:"Email" example:"correo@example.com"`
 }
 
-type ExampleUserPut struct {
-    Nombre        string `json:"Nombre" example:"Pedro"`
-    Celular       string `json:"Celular" example:"9613214782"`
-    Email         string `json:"Email" example:"correo@example.com"`
+type ExampleClientePut struct {
+	Nombre  string `json:"Nombre" example:"Pedro"`
+	Celular string `json:"Celular" example:"9613214782"`
+	Email   string `json:"Email" example:"correo@example.com"`
 }
-
-var userCollection *mongo.Collection
 
 var (
 	// Expresion regular para validar que el campo Clave_Cliente sea un número entero
 	identRegexNumeric = regexp.MustCompile(`^[0-9]*$`);
 	// Expresion regular para validar que el campo Nombre sea una cadena de caracteres sin simbolos, numeros y 1 espacio entre palabras
-	// identRegexNombre = regexp.MustCompile(`^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$`)
+	identRegexNombre = regexp.MustCompile(`^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$`)
 	// // Expresion regular para validar que el campo Celular sea un número de 10 dígitos
-	// identRegexCelular = regexp.MustCompile(`^(91[6-9]|93[24]|96[1-8]|99[24])\d{7}$`)
+	identRegexCelular = regexp.MustCompile(`^(91[6-9]|93[24]|96[1-8]|99[24])\d{7}$`)
 	// // Expresion regular para validar que el campo Email sea un correo electronico valido
-	// identRegexEmail = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com|yahoo\.com|outlook\.com|live\.com|icloud\.com|protonmail\.com|aol\.com|msn\.com|gmx\.com|ymail\.com|me\.com|mail\.com|zoho\.com|edu\.mx|edu\.com|edu\.org)$`)
+	identRegexEmail = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com|yahoo\.com|outlook\.com|live\.com|icloud\.com|protonmail\.com|aol\.com|msn\.com|gmx\.com|ymail\.com|me\.com|mail\.com|zoho\.com|edu\.mx|edu\.com|edu\.org)$`)
 )
 
-// func ValidateUserInput(input *models.User) {
-// 	errores := make(map[string][]string)
+var clienteCollection *mongo.Collection
 
-// 	// Validaciones para Nombre
-// 	nombre := strings.TrimSpace(input.Nombre)
-// 	if nombre == "" {
-// 		errores["Nombre"] = append(errores["Nombre"], "El campo Nombre no puede estar vacío")
-// 	} else {
-// 		if !identRegexNombre.MatchString(nombre) {
-// 			errores["Nombre"] = append(errores["Nombre"], "Solo se permiten letras y espacios")
-// 		}
-// 		if len(nombre) < 2 {
-// 			errores["Nombre"] = append(errores["Nombre"], "El Nombre debe tener al menos 2 caracteres")
-// 		}
-// 		if len(nombre) > 50 {
-// 			errores["Nombre"] = append(errores["Nombre"], "El Nombre no puede tener más de 50 caracteres")
-// 		}
-// 	}
-
-// 	// Validaciones para Celular
-// 	celular := strings.TrimSpace(input.Celular)
-// 	if celular == "" {
-// 		errores["Celular"] = append(errores["Celular"], "El campo Celular no puede estar vacío")
-// 	} else {
-// 		if len(celular) != 10 {
-// 			errores["Celular"] = append(errores["Celular"], "El número de celular debe tener exactamente 10 dígitos")
-// 		}
-// 		if !identRegexCelular.MatchString(celular) {
-// 			errores["Celular"] = append(errores["Celular"], "El celular debe tener una lada válida de Chiapas y el formato correcto")
-// 		}
-// 	}
-
-// 	// Validaciones para Email
-// 	email := strings.TrimSpace(input.Email)
-// 	if email == "" {
-// 		errores["Email"] = append(errores["Email"], "El campo Email no puede estar vacío")
-// 	} else {
-// 		if len(email) > 100 {
-// 			errores["Email"] = append(errores["Email"], "El Email no puede exceder 100 caracteres")
-// 		}
-// 		if !identRegexEmail.MatchString(email) {
-// 			errores["Email"] = append(errores["Email"], "El Email debe ser institucional o de proveedores conocidos (gmail, hotmail, yahoo, etc.)")
-// 		}
-// 	}
-
-// 	// Asignar errores en el input
-// 	if len(errores) > 0 {
-// 		input.Errores = errores
-// 	} else {
-// 		input.Errores = nil
-// 	}
-// }
-
-var exampleCreate = ExampleUserCreate{
-        Clave_Cliente: "001",
-        Nombre:        "Pedro",
-        Celular:       "9613214782",
-        Email:         "correo@example.com",
-    }
-
-var examplePut = ExampleUserPut{
-        Nombre:        "Pedro",
-        Celular:       "9613214782",
-        Email:         "correo@example.com",
-    }
-
-func SetUserCollection(c *mongo.Collection) {
-	userCollection = c
+var exampleCreate = ExampleClienteCreate{
+	Clave_Cliente: "001",
+	Nombre:        "Pedro",
+	Celular:       "9613214782",
+	Email:         "correo@example.com",
 }
 
-func CreateUser(c *gin.Context) {
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+var examplePut = ExampleClientePut{
+	Nombre:  "Pedro",
+	Celular: "9613214782",
+	Email:   "correo@example.com",
+}
+
+func SetClienteCollection(c *mongo.Collection) {
+	clienteCollection = c
+}
+
+func CreateCliente(c *gin.Context) {
+	var cliente models.Cliente
+	if err := c.ShouldBindJSON(&cliente); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if user.Clave_Cliente == nil {
+	if cliente.Clave_Cliente == nil {
 		sendError(c, "Clave_Cliente es obligatorio")
 		return
 	}
 
-	claveCliente, err := normalizeClaveCliente(user.Clave_Cliente)
+	claveCliente, err := normalizeClaveCliente(cliente.Clave_Cliente)
 	if err != nil {
 		sendError(c, err.Error())
 		return
 	}
 
-	user.ID = primitive.NewObjectID()
+	cliente.ID = primitive.NewObjectID()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Verificar existencia previa
-	var existingUser models.User
-	err = userCollection.FindOne(ctx, bson.M{"Clave_Cliente": claveCliente}).Decode(&existingUser)
+	var existingCliente models.Cliente
+	err = clienteCollection.FindOne(ctx, bson.M{"Clave_Cliente": claveCliente}).Decode(&existingCliente)
 	if err == nil {
-		sendError(c, "El usuario con Clave_Cliente "+claveCliente+" ya existe")
+		message := fmt.Sprintf("El cliente con Clave_Cliente %s ya existe", claveCliente)
+		log.Println("error:", message)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": message,
+		})
+		return
+	} else if err != mongo.ErrNoDocuments {
+		log.Println("Error al verificar existencia de cliente:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al verificar existencia de cliente"})
 		return
 	}
 
-	user.Clave_Cliente = claveCliente
-	if _, err := userCollection.InsertOne(ctx, user); err != nil {
-		log.Println("Error al insertar usuario:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al insertar usuario"})
+	cliente.Clave_Cliente = claveCliente
+	utils.ValidateCliente(&cliente)
+
+	if _, err := clienteCollection.InsertOne(ctx, cliente); err != nil {
+		log.Println("Error al insertar cliente:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al insertar cliente"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	c.JSON(http.StatusCreated, cliente)
 }
 
 // Función para validar y normalizar Clave_Cliente
@@ -166,11 +122,11 @@ func normalizeClaveCliente(clave interface{}) (string, error) {
 		if !identRegexNumeric.MatchString(v) {
 			return "", fmt.Errorf("Clave_Cliente no es un identificador válido")
 		}
-		intVal, err := strconv.Atoi(v)
+		_, err := strconv.Atoi(v)
 		if err != nil {
 			return "", fmt.Errorf("Clave_Cliente no es un número válido")
 		}
-		return fmt.Sprintf("%010d", intVal), nil
+		return v, nil
 
 	case float64:
 		if math.Mod(v, 1) != 0 {
@@ -179,7 +135,7 @@ func normalizeClaveCliente(clave interface{}) (string, error) {
 		if v < 0 {
 			return "", fmt.Errorf("Clave_Cliente no puede ser negativo")
 		}
-		return fmt.Sprintf("%010d", int(v)), nil
+		return fmt.Sprintf("%d", int(v)), nil
 
 	default:
 		return "", fmt.Errorf("Tipo de dato no válido para Clave_Cliente")
@@ -195,8 +151,7 @@ func sendError(c *gin.Context, message string) {
 	})
 }
 
-
-func GetUsers(c *gin.Context) {
+func GetClientes(c *gin.Context) {
 	page := c.Param("page")
 
 	if page == "" {
@@ -216,6 +171,7 @@ func GetUsers(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, jsonData)
 		return
 	}
+
 	// Convertir a entero
 	intPage, err := strconv.Atoi(page)
 	if err != nil {
@@ -223,7 +179,7 @@ func GetUsers(c *gin.Context) {
 		return
 	}
 
-	// Asignamos el valor a page
+	// Validar rango de página
 	if intPage < 1 || intPage > 10000 {
 		message := "Error: " + page + " no es un número válido | debe ser un número entero del 1 al 10000"
 		log.Println(message)
@@ -238,22 +194,21 @@ func GetUsers(c *gin.Context) {
 	limit := 100
 	skip := (intPage - 1) * limit
 
-	var users []models.User
+	var clientes []models.Cliente
 
-	cacheKey := fmt.Sprintf("users_cache_page_%d", intPage)
-	cachedUsers, err := utils.RedisClient.Get(utils.Ctx, cacheKey).Result()
+	cacheKey := fmt.Sprintf("clientes_cache_page_%d", intPage)
+	cachedClientes, err := utils.RedisClient.Get(utils.Ctx, cacheKey).Result()
 	if err == nil {
-		if err := json.Unmarshal([]byte(cachedUsers), &users); err == nil {
+		if err := json.Unmarshal([]byte(cachedClientes), &clientes); err == nil {
 			// Si los datos están en caché, los devolvemos
 			log.Println("Datos obtenidos de la caché")
-			c.JSON(http.StatusOK, users)
+			c.JSON(http.StatusOK, clientes)
 			return
 		}
 		log.Println("Error al deserializar datos de caché: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al deserializar datos de caché"})
 		return
 	}
-	
 
 	// Si no están en caché, los obtenemos de la base de datos
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -262,138 +217,105 @@ func GetUsers(c *gin.Context) {
 	options := options.Find()
 	options.SetLimit(int64(limit))
 	options.SetSkip(int64(skip))
-	
-	cursor, err := userCollection.Find(ctx, bson.M{}, options)
+
+	cursor, err := clienteCollection.Find(ctx, bson.M{}, options)
 	if err != nil {
-		log.Println("Error al obtener usuarios: ", err)
+		log.Println("Error al obtener clientes: ", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer cursor.Close(ctx)
 
 	for cursor.Next(ctx) {
-		var user models.User
-		if err := cursor.Decode(&user); err != nil {
+		var cliente models.Cliente
+		if err := cursor.Decode(&cliente); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		users = append(users, user)
+		clientes = append(clientes, cliente)
 	}
 
 	log.Println("Datos obtenidos de la base de datos")
-	jsonData, _ := json.Marshal(users)
+	jsonData, _ := json.Marshal(clientes)
 	utils.RedisClient.Set(utils.Ctx, cacheKey, jsonData, 5*time.Minute)
-	c.JSON(http.StatusOK, users)
+	c.JSON(http.StatusOK, clientes)
 }
 
-func GetUser(c *gin.Context) {
+func GetCliente(c *gin.Context) {
 	Clave_Cliente := c.Param("Clave_Cliente")
 
-	var user models.User
+	var cliente models.Cliente
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := userCollection.FindOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente}).Decode(&user)
+	err := clienteCollection.FindOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente}).Decode(&cliente)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Cliente no encontrado"})
 		return
 	}
 
-	// ValidateUserInput(&user)
-
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, cliente)
 }
 
-func UpdateUser(c *gin.Context) {
+func UpdateCliente(c *gin.Context) {
 	Clave_Cliente := c.Param("Clave_Cliente")
 	if Clave_Cliente == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "El campo Clave_Cliente es obligatorio"})
 		return
 	}
 
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var cliente models.Cliente
+	if err := c.ShouldBindJSON(&cliente); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Validación de campos obligatorios
-	if user.Nombre == "" {
-		message := "Error: Nombre es obligatorio"
-		log.Println(message)
-		jsonData := gin.H{
-			"error":   message,
-			"example": examplePut,
-		}
-		c.JSON(http.StatusBadRequest, jsonData)
-		return
-	}
-
-	if user.Celular == "" {
-		message := "Error: Celular es obligatorio"
-		log.Println(message)
-		jsonData := gin.H{
-			"error":   message,
-			"example": examplePut,
-		}
-		c.JSON(http.StatusBadRequest, jsonData)
-		return
-	}
-
-	if user.Email == "" {
-		message := "Error: Email es obligatorio"
-		log.Println(message)
-		jsonData := gin.H{
-			"error":   message,
-			"example": examplePut,
-		}
-		c.JSON(http.StatusBadRequest, jsonData)
-		return
-	}
-
+	utils.ValidateCliente(&cliente)
+	
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Solo actualizamos los campos válidos, no el ID
 	update := bson.M{
 		"$set": bson.M{
-			"Nombre":        user.Nombre,
-			"Celular":       user.Celular,
-			"Email":         user.Email,
+			"Nombre":  cliente.Nombre,
+			"Celular": cliente.Celular,
+			"Email":   cliente.Email,
+			"Errores": cliente.Errores,
 		},
 	}
 
-	result, err := userCollection.UpdateOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente}, update)
+	result, err := clienteCollection.UpdateOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente}, update)
 	if err != nil {
-		log.Println("Error al actualizar usuario: ", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al actualizar usuario"})
+		log.Println("Error al actualizar cliente: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al actualizar cliente"})
 		return
 	}
 
 	if result.MatchedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Cliente no encontrado"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Usuario actualizado"})
+	c.JSON(http.StatusOK, gin.H{"message": "Cliente actualizado correctamente"})
 }
 
-func DeleteUser(c *gin.Context) {
+func DeleteCliente(c *gin.Context) {
 	Clave_Cliente := c.Param("Clave_Cliente")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	result, err := userCollection.DeleteOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente})
+	result, err := clienteCollection.DeleteOne(ctx, bson.M{"Clave_Cliente": Clave_Cliente})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar usuario"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al eliminar cliente"})
 		return
 	}
 
 	if result.DeletedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Usuario no encontrado"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Cliente no encontrado"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Usuario eliminado"})
+	c.JSON(http.StatusOK, gin.H{"message": "Cliente eliminado correctamente"})
 }

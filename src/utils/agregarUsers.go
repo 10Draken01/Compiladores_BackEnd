@@ -33,7 +33,7 @@ func AddOneHundredThousandUsers(collection *mongo.Collection) {
 	var users []interface{}
 
 	for i := 1; i <= 20000000; i++ {
-		user := models.User{
+		user := models.Cliente{
 			ID:            primitive.NewObjectID(),
 			Clave_Cliente: fmt.Sprintf("%010d", i),
 			Nombre:        f.Person().Name(),
