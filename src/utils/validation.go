@@ -289,11 +289,8 @@ func ValidateClientes(clientes []*models.Cliente) map[int]map[string][]string {
 	
 	for i, cliente := range clientes {
 		ValidateCliente(cliente)
-		if cliente.Errores != nil {
-			// Type assertion para convertir interface{} a map[string][]string
-			if errores, ok := cliente.Errores.(map[string][]string); ok && len(errores) > 0 {
-				todosErrores[i] = errores
-			}
+		if cliente.Errores != nil && len(cliente.Errores) > 0 {
+			todosErrores[i] = cliente.Errores
 		}
 	}
 	
@@ -302,20 +299,14 @@ func ValidateClientes(clientes []*models.Cliente) map[int]map[string][]string {
 
 // Función para obtener un resumen de errores
 func GetErrorSummary(cliente *models.Cliente) string {
-	if cliente.Errores == nil {
-		return "Sin errores de validación"
-	}
-	
-	// Type assertion para convertir interface{} a map[string][]string
-	errores, ok := cliente.Errores.(map[string][]string)
-	if !ok || len(errores) == 0 {
+	if cliente.Errores == nil || len(cliente.Errores) == 0 {
 		return "Sin errores de validación"
 	}
 	
 	totalErrores := 0
-	for _, listaErrores := range errores {
+	for _, listaErrores := range cliente.Errores {
 		totalErrores += len(listaErrores)
 	}
 	
-	return fmt.Sprintf("Se encontraron %d errores en %d campos", totalErrores, len(errores))
+	return fmt.Sprintf("Se encontraron %d errores en %d campos", totalErrores, len(cliente.Errores))
 }

@@ -8,5 +8,5 @@ type Cliente struct {
     Nombre       string                     `json:"Nombre" bson:"Nombre"`
     Celular      string                     `json:"Celular" bson:"Celular"`
     Email        string                     `json:"Email" bson:"Email"`
-    Errores      any                        `json:"Errores" bson:"Errores"`
+    Errores      map[string][]string        `json:"Errores" bson:"Errores"`
 }

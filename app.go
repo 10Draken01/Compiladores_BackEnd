@@ -40,7 +40,7 @@ func main() {
 	clienteCollection := config.GetCollection(dbName, "users")
 
 	// Luego pasarla a la función que carga los usuarios falsos
-	utils.AddOneHundredThousandUsers(clienteCollection)
+	utils.AddManyClientes(clienteCollection)
 
     r := gin.Default()
 
