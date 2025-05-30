@@ -152,13 +152,12 @@ func CreateCliente(c *gin.Context) {
 	sendSuccessResponse(c, http.StatusCreated, "Cliente creado exitosamente", cliente, nil)
 }
 
-// GetClientes - Obtener clientes con caché optimizado
 func GetClientes(c *gin.Context) {
 	page := c.Param("page")
 
 	if page == "" {
-		sendErrorResponse(c, http.StatusBadRequest, 
-			"El atributo page es obligatorio | debe ser un número entero del 1 al 10000", 
+		sendErrorResponse(c, http.StatusBadRequest,
+			"El atributo page es obligatorio | debe ser un número entero del 1 al 10000",
 			nil, "1")
 		return
 	}
@@ -183,46 +182,50 @@ func GetClientes(c *gin.Context) {
 		return
 	}
 
-	limit := 100
-	skip := (intPage - 1) * limit
+	limit := int64(100)
+	skip := int64((intPage - 1) * int(limit))
 
 	// Intentar obtener desde caché primero
 	if cachedClientes, found, err := utils.GetCachedClientesList(intPage); found && err == nil {
 		utils.UpdateCacheStats("hit")
-		
+
 		meta := &MetaInfo{
 			Page:      intPage,
-			Limit:     limit,
+			Limit:     int(limit),
 			CacheHit:  true,
 			Source:    "cache",
 			Timestamp: time.Now().Unix(),
 		}
-		
+
 		sendSuccessResponse(c, http.StatusOK, "Clientes obtenidos desde caché", cachedClientes, meta)
 		return
 	}
 
-	// Si no está en caché, obtener de la base de datos
 	utils.UpdateCacheStats("miss")
-	
+
 	var clientes []models.Cliente
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Contar total de documentos (solo si es la primera página para optimización)
-	var total int64
+	var total int64 = 0
 	if intPage == 1 {
-		if count, err := clienteCollection.CountDocuments(ctx, bson.M{}); err == nil {
-			total = count
+		// Contar total documentos sólo para la primera página
+		total, err = clienteCollection.CountDocuments(ctx, bson.M{})
+		if err != nil {
+			log.Printf("Error contando documentos: %v", err)
+			// Puedes decidir retornar error o continuar con total=0
 		}
 	}
 
-	options := options.Find()
-	options.SetLimit(int64(limit))
-	options.SetSkip(int64(skip))
-	options.SetSort(bson.D{{"Clave_Cliente", 1}}) // Ordenar para consistencia
+	// Opciones de búsqueda con paginación
+	findOptions := options.Find()
+	findOptions.SetLimit(limit)
+	findOptions.SetSkip(skip)
+	// Ordenar por Clave_Cliente para aprovechar el índice
+	findOptions.SetSort(bson.D{{Key: "Clave_Cliente", Value: 1}})
 
-	cursor, err := clienteCollection.Find(ctx, bson.M{}, options)
+	// Ejecutar consulta
+	cursor, err := clienteCollection.Find(ctx, bson.M{}, findOptions)
 	if err != nil {
 		log.Printf("Error al obtener clientes: %v", err)
 		sendErrorResponse(c, http.StatusInternalServerError, "Error al obtener clientes", nil, nil)
@@ -234,22 +237,29 @@ func GetClientes(c *gin.Context) {
 		var cliente models.Cliente
 		if err := cursor.Decode(&cliente); err != nil {
 			log.Printf("Error decodificando cliente: %v", err)
-			continue
+			sendErrorResponse(c, http.StatusInternalServerError, "Error decodificando cliente", nil, nil)
+			return
 		}
 		clientes = append(clientes, cliente)
 	}
 
-	// Guardar en caché de forma asíncrona
-	go func() {
-		if err := utils.CacheClientesList(intPage, clientes, utils.DefaultTTL); err != nil {
-			log.Printf("Error guardando página %d en caché: %v", intPage, err)
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		sendErrorResponse(c, http.StatusInternalServerError, "Error en cursor de clientes", nil, nil)
+		return
+	}
+
+	// Guardar en caché de forma asíncrona (no bloquea la respuesta)
+	go func(page int, data []models.Cliente) {
+		if err := utils.CacheClientesList(page, data, utils.DefaultTTL); err != nil {
+			log.Printf("Error guardando página %d en caché: %v", page, err)
 		}
 		utils.UpdateCacheStats("set")
-	}()
+	}(intPage, clientes)
 
 	meta := &MetaInfo{
 		Page:      intPage,
-		Limit:     limit,
+		Limit:     int(limit),
 		Total:     total,
 		CacheHit:  false,
 		Source:    "database",
@@ -258,6 +268,7 @@ func GetClientes(c *gin.Context) {
 
 	sendSuccessResponse(c, http.StatusOK, "Clientes obtenidos desde base de datos", clientes, meta)
 }
+
 
 // GetCliente - Obtener cliente individual con caché
 func GetCliente(c *gin.Context) {
@@ -507,14 +518,6 @@ func normalizeClaveCliente(claveCliente interface{}) (string, error) {
 	// Validar que sea numérico
 	if !identRegexNumeric.MatchString(claveStr) {
 		return "", fmt.Errorf("Clave_Cliente debe contener solo números")
-	}
-
-	// Normalizar a formato de 3 dígitos con padding de ceros
-	if intClave, err := strconv.Atoi(claveStr); err == nil {
-		if intClave < 1 || intClave > 999 {
-			return "", fmt.Errorf("Clave_Cliente debe estar entre 001 y 999")
-		}
-		return fmt.Sprintf("%03d", intClave), nil
 	}
 
 	return "", fmt.Errorf("Clave_Cliente inválida")
